@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Treasure Escape 3D - A lightweight 3D browser game built with Three.js">
+  <title>Treasure Escape 3D | Three.js Browser Game</title>
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Three.js from CDN (lightweight 3D library) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <!-- Game styles -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========== HUD OVERLAY ========== -->
+  <!-- This sits on top of the 3D canvas -->
+  <div id="hud">
+    <h1 id="game-title">👻 Treasure Escape 3D 💎</h1>
+    <div id="hud-stats">
+      <div id="score-display">🏆 Score: <span id="score">0</span></div>
+      <div id="timer-display">⏱️ Time: <span id="timer">0</span>s</div>
+      <div id="difficulty-display">🔥 <span id="difficulty">Easy</span></div>
+    </div>
+  </div>
+
+  <!-- ========== GAME OVER / WIN OVERLAY ========== -->
+  <div id="overlay" class="hidden">
+    <div id="overlay-content">
+      <div id="overlay-emoji"></div>
+      <h2 id="status-text"></h2>
+      <p id="status-sub"></p>
+      <button id="restart-btn" onclick="restartGame()">🔄 Play Again</button>
+    </div>
+  </div>
+
+  <!-- ========== CONTROLS HINT ========== -->
+  <div id="controls-hint">
+    🎮 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or Arrow Keys to move &nbsp;|&nbsp; 💎 Find the treasure!
+  </div>
+
+  <!-- ========== MINIMAP ========== -->
+  <canvas id="minimap" width="160" height="160"></canvas>
+
+  <!-- Game Logic -->
+  <script src="game3d.js"></script>
+</body>
+</html>
