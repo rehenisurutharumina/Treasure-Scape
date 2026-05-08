@@ -1,0 +1,452 @@
+/* ============================================
+   TREASURE ESCAPE — Complete Stylesheet
+   A polished, modern look for a 2D browser game.
+   ============================================ */
+
+/* ---------- CSS Variables (Design Tokens) ---------- */
+:root {
+  --bg-dark: #0f0f1a;
+  --bg-card: rgba(20, 20, 40, 0.85);
+  --accent-purple: #a855f7;
+  --accent-cyan: #22d3ee;
+  --accent-gold: #facc15;
+  --accent-red: #f43f5e;
+  --accent-green: #34d399;
+  --text-primary: #f0f0f5;
+  --text-muted: #9ca3af;
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --game-width: 700px;
+  --game-height: 500px;
+  --radius: 16px;
+  --font: 'Outfit', sans-serif;
+}
+
+/* ---------- Global Reset ---------- */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ---------- Body ---------- */
+body {
+  font-family: var(--font);
+  background: var(--bg-dark);
+  background: linear-gradient(135deg, #0f0f1a 0%, #1a1033 40%, #0d1f2d 100%);
+  color: var(--text-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Floating particle effect on body (pure CSS) */
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background:
+    radial-gradient(2px 2px at 20% 30%, rgba(168, 85, 247, 0.4), transparent),
+    radial-gradient(2px 2px at 40% 70%, rgba(34, 211, 238, 0.3), transparent),
+    radial-gradient(2px 2px at 60% 20%, rgba(250, 204, 21, 0.3), transparent),
+    radial-gradient(2px 2px at 80% 50%, rgba(168, 85, 247, 0.2), transparent),
+    radial-gradient(1.5px 1.5px at 15% 80%, rgba(34, 211, 238, 0.3), transparent),
+    radial-gradient(1.5px 1.5px at 70% 85%, rgba(250, 204, 21, 0.2), transparent);
+  animation: drift 20s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes drift {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(-3%, 3%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ---------- Game Wrapper ---------- */
+#game-wrapper {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ---------- Title ---------- */
+#game-title {
+  font-size: 2.4rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  animation: titlePulse 3s ease-in-out infinite;
+}
+
+@keyframes titlePulse {
+  0%, 100% { filter: brightness(1); transform: scale(1); }
+  50%      { filter: brightness(1.15); transform: scale(1.02); }
+}
+
+/* ---------- HUD (Score / Level / Timer / Difficulty) ---------- */
+#hud {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#hud > div {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  padding: 8px 20px;
+  border-radius: 40px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#hud > div:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.2);
+}
+
+#score-display span { color: var(--accent-gold); }
+#level-display span { color: var(--accent-cyan); }
+#timer-display span { color: var(--accent-green); }
+
+/* Difficulty display — color changes based on current difficulty */
+#difficulty-display span { font-weight: 700; }
+#difficulty-display span.easy   { color: var(--accent-green); }
+#difficulty-display span.medium { color: #fb923c; }
+#difficulty-display span.hard   { color: var(--accent-red); }
+
+/* ---------- Game Area (2D rectangular map) ---------- */
+#game-area {
+  position: relative;
+  width: var(--game-width);
+  height: var(--game-height);
+
+  /* Fallback background color if background.png is not available */
+  background-color: #111827;
+
+  /* Load the background image from the assets folder */
+  background-image: url('assets/background.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  border: 2px solid var(--glass-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow:
+    0 0 40px rgba(168, 85, 247, 0.12),
+    0 0 80px rgba(34, 211, 238, 0.06),
+    inset 0 0 60px rgba(0, 0, 0, 0.3);
+}
+
+/* Subtle grid overlay on game area */
+#game-area::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------- Game Entities ---------- */
+.entity {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: none;
+
+  /* Hide emoji text — images are used instead.
+     If images fail to load, the fallback background color shows. */
+  font-size: 0;
+  color: transparent;
+}
+
+/* Boy / Player — loads assets/boy.png */
+.player {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background-color: #3b82f6;
+  background-image: url('assets/boy.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  box-shadow:
+    0 0 12px rgba(59, 130, 246, 0.5),
+    0 0 24px rgba(59, 130, 246, 0.2);
+  animation: playerGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes playerGlow {
+  0%, 100% { box-shadow: 0 0 12px rgba(59, 130, 246, 0.5), 0 0 24px rgba(59, 130, 246, 0.2); }
+  50%      { box-shadow: 0 0 18px rgba(59, 130, 246, 0.7), 0 0 36px rgba(59, 130, 246, 0.35); }
+}
+
+/* Ghost / Enemy — loads assets/ghost.png */
+.ghost {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px 12px 8px 8px;
+  background-color: #dc2626;
+  background-image: url('assets/ghost.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  box-shadow:
+    0 0 14px rgba(244, 63, 94, 0.6),
+    0 0 28px rgba(244, 63, 94, 0.2);
+  animation: ghostFloat 2s ease-in-out infinite;
+}
+
+@keyframes ghostFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+/* Treasure — loads assets/treasure.png */
+.treasure {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: #f59e0b;
+  background-image: url('assets/treasure.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  box-shadow:
+    0 0 16px rgba(250, 204, 21, 0.6),
+    0 0 32px rgba(250, 204, 21, 0.25);
+  animation: treasureSpin 3s linear infinite;
+}
+
+@keyframes treasureSpin {
+  0%   { transform: rotate(0deg) scale(1); }
+  25%  { transform: rotate(5deg) scale(1.05); }
+  50%  { transform: rotate(0deg) scale(1); }
+  75%  { transform: rotate(-5deg) scale(1.05); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+/* Wall / Obstacle — brown blocks */
+.wall {
+  position: absolute;
+  background: linear-gradient(135deg, #78350f, #92400e);
+  border: 2px solid rgba(180, 120, 60, 0.7);
+  border-radius: 6px;
+  box-shadow:
+    0 0 12px rgba(180, 120, 60, 0.35),
+    inset 0 2px 6px rgba(255, 255, 255, 0.1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+  /* Brick-like grid pattern */
+  background-image:
+    linear-gradient(135deg, #78350f, #92400e),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.06) 0px,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px,
+      transparent 20px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.06) 0px,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px,
+      transparent 20px
+    );
+}
+
+/* ---------- Overlay (Game Over / Win) ---------- */
+#overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 25, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  animation: fadeIn 0.4s ease;
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+#overlay-content {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+#overlay-emoji {
+  font-size: 4rem;
+  animation: bounceIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes bounceIn {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+#status-text {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+#status-text.win {
+  background: linear-gradient(135deg, var(--accent-gold), #fde68a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+#status-text.lose {
+  background: linear-gradient(135deg, var(--accent-red), #fda4af);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+#status-sub {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+/* Overlay Play Again Button */
+#restart-btn {
+  margin-top: 8px;
+  padding: 12px 32px;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  border: none;
+  border-radius: 40px;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#restart-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 6px 24px rgba(168, 85, 247, 0.4);
+}
+
+#restart-btn:active {
+  transform: scale(0.97);
+}
+
+/* ---------- Persistent Restart Button ---------- */
+#restart-game-btn {
+  padding: 12px 36px;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  border: none;
+  border-radius: 40px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.3);
+}
+
+#restart-game-btn:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 6px 28px rgba(245, 158, 11, 0.5);
+}
+
+#restart-game-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 1px 6px rgba(245, 158, 11, 0.2);
+}
+
+/* ---------- Instructions ---------- */
+#instructions {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+#instructions kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 760px) {
+  :root {
+    --game-width: 95vw;
+    --game-height: 60vw;
+  }
+
+  #game-title {
+    font-size: 1.6rem;
+  }
+
+  #hud > div {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+  }
+
+  .entity {
+    font-size: 1.4rem;
+  }
+
+  .player, .ghost {
+    width: 30px;
+    height: 30px;
+  }
+
+  .treasure {
+    width: 28px;
+    height: 28px;
+  }
+}
