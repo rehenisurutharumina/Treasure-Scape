@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Treasure Escape - A fun 2D browser game where you guide a boy to the treasure while escaping a ghost!">
+  <title>Treasure Escape | 2D Browser Game</title>
+
+  <!-- Google Font for a modern look -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Link to the stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========== MAIN WRAPPER ========== -->
+  <div id="game-wrapper">
+
+    <!-- Game Title -->
+    <h1 id="game-title">👻 Treasure Escape 💎</h1>
+
+    <!-- HUD: Score, Level, Timer, and Difficulty -->
+    <div id="hud">
+      <div id="score-display">🏆 Score: <span id="score">0</span></div>
+      <div id="level-display">📊 Level: <span id="level">1</span></div>
+      <div id="timer-display">⏱️ Time: <span id="timer">0</span>s</div>
+      <div id="difficulty-display">🔥 Difficulty: <span id="difficulty">Easy</span></div>
+    </div>
+
+    <!-- The Game Canvas Area (2D rectangular map) -->
+    <div id="game-area">
+      <!-- The boy, ghost, treasure, and walls are created by JavaScript -->
+
+      <!-- Overlay shown on Game Over or Win -->
+      <div id="overlay" class="hidden">
+        <div id="overlay-content">
+          <div id="overlay-emoji"></div>
+          <h2 id="status-text"></h2>
+          <p id="status-sub"></p>
+          <button id="restart-btn" onclick="restartGame()">🔄 Play Again</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restart Game Button — always visible, works after Game Over and Win -->
+    <button id="restart-game-btn" onclick="restartGame()">🔄 Restart Game</button>
+
+    <!-- Instructions -->
+    <div id="instructions">
+      <span>🎮 Use <kbd>Arrow Keys</kbd> or <kbd>WASD</kbd> to move</span>
+      <span>💎 Reach the treasure before the ghost catches you!</span>
+    </div>
+
+  </div>
+
+  <!-- Link to the game logic -->
+  <script src="game.js"></script>
+</body>
+</html>
