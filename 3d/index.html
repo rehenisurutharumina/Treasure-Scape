@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Treasure Escape 3D - A lightweight 3D browser game built with Three.js">
+  <meta name="description" content="Treasure Escape 3D — A fantasy adventure browser game built with Three.js. Escape the ghost, find the treasure!">
   <title>Treasure Escape 3D | Three.js Browser Game</title>
 
   <!-- Google Font -->
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Three.js from CDN (lightweight 3D library) -->
+  <!-- Three.js from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
   <!-- Game styles -->
@@ -17,14 +17,79 @@
 </head>
 <body>
 
+  <!-- ========== START SCREEN ========== -->
+  <div id="start-screen">
+    <div id="start-content">
+      <div id="start-particles"></div>
+      <div id="start-title-wrap">
+        <h1 id="start-title">Treasure Escape</h1>
+        <p id="start-subtitle">A Fantasy Jungle Adventure</p>
+      </div>
+      <div id="start-info-panel">
+        <div class="info-row">
+          <span class="info-icon">🎮</span>
+          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or Arrow Keys to move</span>
+        </div>
+        <div class="info-row">
+          <span class="info-icon">🏃</span>
+          <span>Hold <kbd>Shift</kbd> to sprint</span>
+        </div>
+        <div class="info-row">
+          <span class="info-icon">📷</span>
+          <span>Press <kbd>C</kbd> to toggle camera view</span>
+        </div>
+        <div class="info-row">
+          <span class="info-icon">💎</span>
+          <span>Find the treasure chest before the ghost catches you!</span>
+        </div>
+        <div class="info-row">
+          <span class="info-icon">👻</span>
+          <span>The ghost gets faster over time — don't stop moving!</span>
+        </div>
+      </div>
+      <button id="play-btn">⚔️ Start Adventure</button>
+      <p id="start-footer">Built with Three.js — No Unity</p>
+    </div>
+  </div>
+
   <!-- ========== HUD OVERLAY ========== -->
-  <!-- This sits on top of the 3D canvas -->
-  <div id="hud">
-    <h1 id="game-title">👻 Treasure Escape 3D 💎</h1>
-    <div id="hud-stats">
-      <div id="score-display">🏆 Score: <span id="score">0</span></div>
-      <div id="timer-display">⏱️ Time: <span id="timer">0</span>s</div>
-      <div id="difficulty-display">🔥 <span id="difficulty">Easy</span></div>
+  <div id="hud" class="hidden">
+    <div id="hud-left">
+      <h1 id="game-title">💎 Treasure Escape</h1>
+    </div>
+    <div id="hud-center">
+      <div id="health-bar-wrap">
+        <div id="health-bar-label">❤️ Health</div>
+        <div id="health-bar-bg">
+          <div id="health-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+    <div id="hud-right">
+      <div id="hud-stats">
+        <div id="score-display">🏆 <span id="score">0</span></div>
+        <div id="timer-display">⏱️ <span id="timer">0</span>s</div>
+        <div id="difficulty-display">🔥 <span id="difficulty">Easy</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== GAME BUTTONS (Pause / Restart) ========== -->
+  <div id="game-buttons" class="hidden">
+    <button id="pause-btn" title="Pause Game">⏸️</button>
+    <button id="restart-game-btn" title="Restart Game">🔄</button>
+  </div>
+
+  <!-- ========== PAUSE SCREEN ========== -->
+  <div id="pause-screen" class="hidden">
+    <div id="pause-content">
+      <div id="pause-emoji">⏸️</div>
+      <h2 id="pause-title">Game Paused</h2>
+      <p id="pause-sub">Take a breath, the ghost is waiting...</p>
+      <div id="pause-buttons">
+        <button id="resume-btn">▶️ Resume</button>
+        <button id="pause-restart-btn">🔄 Restart</button>
+      </div>
     </div>
   </div>
 
@@ -33,19 +98,28 @@
     <div id="overlay-content">
       <div id="overlay-emoji"></div>
       <h2 id="status-text"></h2>
+      <div id="final-stats"></div>
       <p id="status-sub"></p>
-      <button id="restart-btn" onclick="restartGame()">🔄 Play Again</button>
+      <button id="restart-btn">🔄 Play Again</button>
     </div>
   </div>
 
+  <!-- ========== DISTANCE INDICATOR ========== -->
+  <div id="distance-indicator" class="hidden">
+    <div id="treasure-dist">💎 Treasure: <span id="treasure-distance">--</span>m</div>
+    <div id="ghost-dist">👻 Ghost: <span id="ghost-distance">--</span>m</div>
+  </div>
+
   <!-- ========== CONTROLS HINT ========== -->
-  <div id="controls-hint">
-    🎮 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or Arrow Keys to move &nbsp;|&nbsp; 💎 Find the treasure!
+  <div id="controls-hint" class="hidden">
+    🎮 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &nbsp;|&nbsp; <kbd>Shift</kbd> Sprint &nbsp;|&nbsp; <kbd>C</kbd> Camera &nbsp;|&nbsp; <kbd>P</kbd> Pause
   </div>
 
   <!-- ========== MINIMAP ========== -->
-  <canvas id="minimap" width="160" height="160"></canvas>
+  <canvas id="minimap" class="hidden" width="180" height="180"></canvas>
 
+  <!-- World Builder -->
+  <script src="world.js"></script>
   <!-- Game Logic -->
   <script src="game3d.js"></script>
 </body>

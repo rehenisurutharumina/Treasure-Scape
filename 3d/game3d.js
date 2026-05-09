@@ -1,77 +1,67 @@
 // ============================================================
-// TREASURE ESCAPE 3D — Game Logic (Three.js)
-//
-// A lightweight 3D browser game.
-// A boy runs through a forest. A ghost chases him.
-// Reach the treasure chest before the ghost catches you!
-//
-// Built with Three.js only. No Unity, no other libraries.
-// Opens directly in a browser.
+// TREASURE ESCAPE 3D — Main Game Logic (Three.js)
+// Depends on world.js loaded before this file.
 // ============================================================
 
+// ==============================
+// 1: DOM REFERENCES
+// ==============================
+const scoreEl         = document.getElementById('score');
+const timerEl         = document.getElementById('timer');
+const difficultyEl    = document.getElementById('difficulty');
+const overlay         = document.getElementById('overlay');
+const overlayEmoji    = document.getElementById('overlay-emoji');
+const statusText      = document.getElementById('status-text');
+const statusSub       = document.getElementById('status-sub');
+const finalStats      = document.getElementById('final-stats');
+const minimapCanvas   = document.getElementById('minimap');
+const minimapCtx      = minimapCanvas.getContext('2d');
+const startScreen     = document.getElementById('start-screen');
+const playBtn         = document.getElementById('play-btn');
+const pauseBtn        = document.getElementById('pause-btn');
+const restartGameBtn  = document.getElementById('restart-game-btn');
+const pauseScreen     = document.getElementById('pause-screen');
+const resumeBtn       = document.getElementById('resume-btn');
+const pauseRestartBtn = document.getElementById('pause-restart-btn');
+const restartBtn      = document.getElementById('restart-btn');
+const hudEl           = document.getElementById('hud');
+const gameButtonsEl   = document.getElementById('game-buttons');
+const controlsHintEl  = document.getElementById('controls-hint');
+const distIndicator   = document.getElementById('distance-indicator');
+const treasureDistEl  = document.getElementById('treasure-distance');
+const ghostDistEl     = document.getElementById('ghost-distance');
+const healthBarFill   = document.getElementById('health-bar-fill');
 
 // ==============================
-// SECTION 1: DOM REFERENCES
+// 2: GAME SETTINGS
 // ==============================
-
-const scoreEl      = document.getElementById('score');
-const timerEl      = document.getElementById('timer');
-const difficultyEl = document.getElementById('difficulty');
-const overlay      = document.getElementById('overlay');
-const overlayEmoji = document.getElementById('overlay-emoji');
-const statusText   = document.getElementById('status-text');
-const statusSub    = document.getElementById('status-sub');
-const minimapCanvas = document.getElementById('minimap');
-const minimapCtx    = minimapCanvas.getContext('2d');
-
+const PLAYER_SPEED   = 0.12;
+const SPRINT_SPEED   = 0.2;
+const GHOST_BASE_SPD = 0.04;
+const MAX_HEALTH     = 100;
+const GHOST_DAMAGE   = 0.4;     // damage per frame when close
+const HEALTH_REGEN   = 0.02;    // regen per frame when far
+const BONUS_SCORE    = 500;
 
 // ==============================
-// SECTION 2: GAME SETTINGS
+// 3: GAME STATE
 // ==============================
-
-const PLAYER_SPEED   = 0.12;   // How fast the player moves
-const GHOST_BASE_SPD = 0.04;   // Ghost starting speed (Easy)
-const WORLD_SIZE     = 50;     // Half-size of the ground plane
-const TREE_COUNT     = 35;     // Dense tropical forest
-const ROCK_COUNT     = 18;     // Rocks and boulders
-const BUSH_COUNT     = 30;     // Undergrowth bushes
-const FIREFLY_COUNT  = 40;     // Glowing fireflies
-const MUSHROOM_COUNT = 12;     // Glowing mushrooms
-
-
-// ==============================
-// SECTION 3: GAME STATE
-// ==============================
-
-let score         = 0;
-let time          = 0;
-let ghostSpeed    = GHOST_BASE_SPD;
-let gameOver      = false;
-let timerInterval = null;
-let scoreInterval = null;
-
-// Keyboard tracking
+let score = 0, time = 0, health = MAX_HEALTH;
+let ghostSpeed = GHOST_BASE_SPD;
+let gameOver = false, gamePaused = false, gameStarted = false;
+let timerInterval = null, scoreInterval = null;
+let cameraMode = 'third';  // 'third' or 'top'
+let playerIsMoving = false;
 const keys = {};
 
-
 // ==============================
-// SECTION 4: THREE.JS SETUP
+// 4: THREE.JS SETUP
 // ==============================
-// Create the scene, camera, and renderer.
-
-// --- Scene ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050a18);  // Deep night sky
-scene.fog = new THREE.FogExp2(0x0a0f2a, 0.015);  // Blue-purple night fog
-
-// --- Camera ---
-const camera = new THREE.PerspectiveCamera(
-  60, window.innerWidth / window.innerHeight, 0.1, 250
-);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 250);
 camera.position.set(0, 12, 18);
 camera.lookAt(0, 0, 0);
 
-// --- Renderer ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -79,938 +69,664 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
+// ==============================
+// 5: BUILD WORLD (from world.js)
+// ==============================
+buildWorld(scene);
+const playerObj  = buildPlayer(scene);
+const ghostObj   = buildGhost(scene);
+const treasureObj = buildTreasure(scene);
+
+const player  = playerObj.player;
+const ghost   = ghostObj.ghost;
+const treasure = treasureObj.treasure;
 
 // ==============================
-// SECTION 5: LIGHTING & SKY
+// 6: SOUND SYSTEM (optional files)
 // ==============================
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
 
-// Dim ambient — blue night
-const ambientLight = new THREE.AmbientLight(0x4466aa, 1.2);
-scene.add(ambientLight);
-
-// Moonlight — bright silver-blue, casts shadows
-const moonLight = new THREE.DirectionalLight(0x99aadd, 1.5);
-moonLight.position.set(30, 50, -20);
-moonLight.castShadow = true;
-moonLight.shadow.mapSize.width = 1024;
-moonLight.shadow.mapSize.height = 1024;
-moonLight.shadow.camera.near = 0.5;
-moonLight.shadow.camera.far = 100;
-moonLight.shadow.camera.left = -40;
-moonLight.shadow.camera.right = 40;
-moonLight.shadow.camera.top = 40;
-moonLight.shadow.camera.bottom = -40;
-scene.add(moonLight);
-
-// Hemisphere light — sky blue from above, dark ground below
-const hemiLight = new THREE.HemisphereLight(0x223355, 0x0a1a0a, 0.4);
-scene.add(hemiLight);
-
-// Treasure golden glow
-const treasureGlow = new THREE.PointLight(0xffaa00, 2.5, 18);
-scene.add(treasureGlow);
-
-// Ghost eerie glow
-const ghostGlow = new THREE.PointLight(0xff3366, 1.5, 12);
-scene.add(ghostGlow);
-
-// --- MOON ---
-const moonGeo = new THREE.SphereGeometry(4, 24, 24);
-const moonMat = new THREE.MeshBasicMaterial({ color: 0xeeeedd });
-const moon = new THREE.Mesh(moonGeo, moonMat);
-moon.position.set(60, 80, -80);
-scene.add(moon);
-
-// Moon halo glow
-const moonHalo = new THREE.Mesh(
-  new THREE.SphereGeometry(7, 24, 24),
-  new THREE.MeshBasicMaterial({ color: 0x556688, transparent: true, opacity: 0.15 })
-);
-moonHalo.position.copy(moon.position);
-scene.add(moonHalo);
-
-// Moon point light
-const moonPtLight = new THREE.PointLight(0x8899bb, 0.8, 200);
-moonPtLight.position.copy(moon.position);
-scene.add(moonPtLight);
-
-// --- STARS ---
-const starGeo = new THREE.BufferGeometry();
-const starVerts = [];
-for (let i = 0; i < 600; i++) {
-  starVerts.push(
-    (Math.random() - 0.5) * 300,
-    40 + Math.random() * 80,
-    (Math.random() - 0.5) * 300
-  );
-}
-starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.3, sizeAttenuation: true });
-scene.add(new THREE.Points(starGeo, starMat));
-
-
-// ==============================
-// SECTION 6: GROUND
-// ==============================
-
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(WORLD_SIZE * 2, WORLD_SIZE * 2, 30, 30),
-  new THREE.MeshStandardMaterial({ color: 0x1a3d15, roughness: 0.95 })
-);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
-
-// Mossy center patch
-const patch = new THREE.Mesh(
-  new THREE.CircleGeometry(WORLD_SIZE * 0.7, 32),
-  new THREE.MeshStandardMaterial({ color: 0x264d1f, roughness: 1 })
-);
-patch.rotation.x = -Math.PI / 2;
-patch.position.y = 0.02;
-scene.add(patch);
-
-
-// ==============================
-// SECTION 7: TROPICAL TREES
-// ==============================
-
-const trees = [];
-
-// --- Large jungle canopy tree ---
-function createJungleTree(x, z) {
-  const g = new THREE.Group();
-  const h = 5 + Math.random() * 4;
-  // Thick trunk
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.35, 0.55, h, 8),
-    new THREE.MeshStandardMaterial({ color: 0x3d2b1f })
-  );
-  trunk.position.y = h / 2;
-  trunk.castShadow = true;
-  g.add(trunk);
-  // Big round canopy
-  const cSize = 3 + Math.random() * 2;
-  const canopy = new THREE.Mesh(
-    new THREE.SphereGeometry(cSize, 10, 8),
-    new THREE.MeshStandardMaterial({ color: 0x0d4a0d })
-  );
-  canopy.position.y = h + cSize * 0.5;
-  canopy.castShadow = true;
-  g.add(canopy);
-  // Secondary canopy
-  const can2 = new THREE.Mesh(
-    new THREE.SphereGeometry(cSize * 0.6, 8, 6),
-    new THREE.MeshStandardMaterial({ color: 0x1a6622 })
-  );
-  can2.position.set(cSize * 0.5, h + cSize * 0.2, cSize * 0.3);
-  g.add(can2);
-  g.position.set(x, 0, z);
-  scene.add(g);
-  trees.push({ x, z, radius: 1.4 });
+function playTone(freq, dur, type, vol) {
+  try {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = vol || 0.15;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.stop(audioCtx.currentTime + dur);
+  } catch(e) { /* audio not supported */ }
 }
 
-// --- Palm tree ---
-function createPalm(x, z) {
-  const g = new THREE.Group();
-  const h = 6 + Math.random() * 3;
-  const pTrunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.2, 0.3, h, 8),
-    new THREE.MeshStandardMaterial({ color: 0x5c3a1e })
-  );
-  pTrunk.position.y = h / 2;
-  pTrunk.castShadow = true;
-  g.add(pTrunk);
-  // Palm fronds as flat cones
-  for (let i = 0; i < 6; i++) {
-    const frond = new THREE.Mesh(
-      new THREE.ConeGeometry(2.5, 3, 4),
-      new THREE.MeshStandardMaterial({ color: 0x1a7a1a, side: THREE.DoubleSide })
-    );
-    frond.position.set(0, h + 0.5, 0);
-    frond.rotation.z = Math.PI / 3;
-    frond.rotation.y = (i / 6) * Math.PI * 2;
-    g.add(frond);
+function playWinSound() {
+  playTone(523, 0.15, 'square', 0.1);
+  setTimeout(() => playTone(659, 0.15, 'square', 0.1), 150);
+  setTimeout(() => playTone(784, 0.3, 'square', 0.12), 300);
+}
+
+function playLoseSound() {
+  playTone(300, 0.3, 'sawtooth', 0.1);
+  setTimeout(() => playTone(200, 0.5, 'sawtooth', 0.1), 300);
+}
+
+function playGhostNearSound() {
+  playTone(80 + Math.random()*40, 0.4, 'sawtooth', 0.04);
+}
+
+let ghostSoundTimer = 0;
+
+// ==============================
+// 6B: BACKGROUND MUSIC ENGINE
+// ==============================
+// Procedural ambient fantasy music using oscillators.
+// Creates a dark atmospheric drone + evolving melody.
+// No audio files needed — runs entirely from Web Audio API.
+
+let bgMusicPlaying = false;
+let bgMusicNodes = [];    // all oscillators/gains to stop later
+let bgMusicMaster = null; // master gain node
+let melodyInterval = null;
+
+function startBackgroundMusic() {
+  try {
+    if (bgMusicPlaying) return;
+    if (!audioCtx) audioCtx = new AudioCtx();
+    bgMusicPlaying = true;
+
+    // Master volume control
+    bgMusicMaster = audioCtx.createGain();
+    bgMusicMaster.gain.value = 0.25;
+    bgMusicMaster.connect(audioCtx.destination);
+
+    // --- LAYER 1: Deep bass drone ---
+    const bass = audioCtx.createOscillator();
+    const bassGain = audioCtx.createGain();
+    bass.type = 'sine';
+    bass.frequency.value = 55; // A1 — deep rumble
+    bassGain.gain.value = 0.12;
+    bass.connect(bassGain);
+    bassGain.connect(bgMusicMaster);
+    bass.start();
+    bgMusicNodes.push(bass, bassGain);
+
+    // Sub-bass LFO for movement
+    const bassLfo = audioCtx.createOscillator();
+    const bassLfoGain = audioCtx.createGain();
+    bassLfo.type = 'sine';
+    bassLfo.frequency.value = 0.15; // very slow wobble
+    bassLfoGain.gain.value = 8;
+    bassLfo.connect(bassLfoGain);
+    bassLfoGain.connect(bass.frequency);
+    bassLfo.start();
+    bgMusicNodes.push(bassLfo, bassLfoGain);
+
+    // --- LAYER 2: Atmospheric pad (eerie chord) ---
+    const padNotes = [110, 164.81, 220]; // Am chord: A2, E3, A3
+    padNotes.forEach((freq) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.04;
+      osc.connect(gain);
+      gain.connect(bgMusicMaster);
+      osc.start();
+      bgMusicNodes.push(osc, gain);
+
+      // Slow detune for haunting shimmer
+      const lfo = audioCtx.createOscillator();
+      const lfoG = audioCtx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.3 + Math.random() * 0.3;
+      lfoG.gain.value = 2;
+      lfo.connect(lfoG);
+      lfoG.connect(osc.detune);
+      lfo.start();
+      bgMusicNodes.push(lfo, lfoG);
+    });
+
+    // --- LAYER 3: Ghost whisper (filtered noise-like texture) ---
+    const whisper = audioCtx.createOscillator();
+    const whisperGain = audioCtx.createGain();
+    const whisperFilter = audioCtx.createBiquadFilter();
+    whisper.type = 'sawtooth';
+    whisper.frequency.value = 1200;
+    whisperGain.gain.value = 0.015;
+    whisperFilter.type = 'bandpass';
+    whisperFilter.frequency.value = 800;
+    whisperFilter.Q.value = 5;
+    whisper.connect(whisperFilter);
+    whisperFilter.connect(whisperGain);
+    whisperGain.connect(bgMusicMaster);
+    whisper.start();
+    bgMusicNodes.push(whisper, whisperGain);
+
+    // Sweep the whisper filter slowly
+    const whisperLfo = audioCtx.createOscillator();
+    const whisperLfoG = audioCtx.createGain();
+    whisperLfo.type = 'sine';
+    whisperLfo.frequency.value = 0.08;
+    whisperLfoG.gain.value = 500;
+    whisperLfo.connect(whisperLfoG);
+    whisperLfoG.connect(whisperFilter.frequency);
+    whisperLfo.start();
+    bgMusicNodes.push(whisperLfo, whisperLfoG);
+
+    // --- LAYER 4: Evolving melody (plays a random note every few seconds) ---
+    // Minor pentatonic scale in A: A, C, D, E, G across octaves
+    const melodyNotes = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33];
+
+    function playMelodyNote() {
+      if (!bgMusicPlaying) return;
+      const freq = melodyNotes[Math.floor(Math.random() * melodyNotes.length)];
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.06;
+      osc.connect(gain);
+      gain.connect(bgMusicMaster);
+      osc.start();
+      // Fade out over 2 seconds
+      gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2.5);
+      osc.stop(audioCtx.currentTime + 2.5);
+    }
+
+    // Play a melody note every 2-4 seconds
+    melodyInterval = setInterval(() => {
+      if (bgMusicPlaying) playMelodyNote();
+    }, 2500);
+    playMelodyNote(); // first note immediately
+
+  } catch(e) { /* audio not supported, game continues silently */ }
+}
+
+function stopBackgroundMusic() {
+  bgMusicPlaying = false;
+  clearInterval(melodyInterval);
+  melodyInterval = null;
+
+  // Stop all active oscillators
+  bgMusicNodes.forEach(node => {
+    try {
+      if (node.stop) node.stop();
+      if (node.disconnect) node.disconnect();
+    } catch(e) { /* already stopped */ }
+  });
+  bgMusicNodes = [];
+
+  if (bgMusicMaster) {
+    try { bgMusicMaster.disconnect(); } catch(e) {}
+    bgMusicMaster = null;
   }
-  g.position.set(x, 0, z);
-  scene.add(g);
-  trees.push({ x, z, radius: 1.0 });
 }
 
-// Scatter mixed trees
-for (let i = 0; i < TREE_COUNT; i++) {
-  let tx, tz;
-  do {
-    tx = (Math.random() - 0.5) * WORLD_SIZE * 1.6;
-    tz = (Math.random() - 0.5) * WORLD_SIZE * 1.6;
-  } while (Math.sqrt(tx * tx + tz * tz) < 6);
-  if (Math.random() > 0.4) createJungleTree(tx, tz);
-  else createPalm(tx, tz);
-}
-
-// --- Bushes (undergrowth) ---
-for (let i = 0; i < BUSH_COUNT; i++) {
-  const bx = (Math.random() - 0.5) * WORLD_SIZE * 1.5;
-  const bz = (Math.random() - 0.5) * WORLD_SIZE * 1.5;
-  if (Math.sqrt(bx * bx + bz * bz) < 4) continue;
-  const s = 0.5 + Math.random() * 0.8;
-  const bush = new THREE.Mesh(
-    new THREE.SphereGeometry(s, 8, 6),
-    new THREE.MeshStandardMaterial({ color: [0x1a5c1a, 0x0d4a0d, 0x2a6e2a][Math.floor(Math.random()*3)] })
-  );
-  bush.position.set(bx, s * 0.5, bz);
-  bush.castShadow = true;
-  scene.add(bush);
-}
-
-
-// ==============================
-// SECTION 7B: GLOWING MUSHROOMS
-// ==============================
-
-for (let i = 0; i < MUSHROOM_COUNT; i++) {
-  const mx = (Math.random() - 0.5) * WORLD_SIZE * 1.3;
-  const mz = (Math.random() - 0.5) * WORLD_SIZE * 1.3;
-  const mg = new THREE.Group();
-  // Stem
-  const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.08, 0.3, 6),
-    new THREE.MeshStandardMaterial({ color: 0xccccaa })
-  );
-  stem.position.y = 0.15;
-  mg.add(stem);
-  // Cap
-  const capColor = [0x44ddaa, 0x33bbff, 0xaa66ff][Math.floor(Math.random()*3)];
-  const cap = new THREE.Mesh(
-    new THREE.SphereGeometry(0.18, 8, 6, 0, Math.PI*2, 0, Math.PI/2),
-    new THREE.MeshStandardMaterial({ color: capColor, emissive: capColor, emissiveIntensity: 0.6 })
-  );
-  cap.position.y = 0.33;
-  mg.add(cap);
-  // Tiny glow light
-  const ml = new THREE.PointLight(capColor, 0.3, 4);
-  ml.position.y = 0.5;
-  mg.add(ml);
-  mg.position.set(mx, 0, mz);
-  scene.add(mg);
-}
-
-
-// ==============================
-// SECTION 8: ROCKS
-// ==============================
-
-const rocks = [];
-
-function createRock(x, z) {
-  const size = 0.4 + Math.random() * 0.7;
-  const rock = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(size, 0),
-    new THREE.MeshStandardMaterial({ color: 0x3a3a44, roughness: 0.9 })
-  );
-  rock.position.set(x, size * 0.35, z);
-  rock.rotation.set(Math.random(), Math.random(), Math.random());
-  rock.castShadow = true;
-  scene.add(rock);
-  // Moss patch on some rocks
-  if (Math.random() > 0.5) {
-    const moss = new THREE.Mesh(
-      new THREE.SphereGeometry(size * 0.5, 6, 4),
-      new THREE.MeshStandardMaterial({ color: 0x2a5a22 })
-    );
-    moss.position.set(x, size * 0.2, z);
-    scene.add(moss);
+function pauseBackgroundMusic() {
+  if (bgMusicMaster) {
+    try { bgMusicMaster.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e) {}
   }
-  rocks.push({ x, z, radius: size * 0.8 });
 }
 
-for (let i = 0; i < ROCK_COUNT; i++) {
-  let rx, rz;
-  do {
-    rx = (Math.random() - 0.5) * WORLD_SIZE * 1.4;
-    rz = (Math.random() - 0.5) * WORLD_SIZE * 1.4;
-  } while (Math.sqrt(rx * rx + rz * rz) < 5);
-  createRock(rx, rz);
+function resumeBackgroundMusic() {
+  if (bgMusicMaster) {
+    try { bgMusicMaster.gain.setValueAtTime(0.25, audioCtx.currentTime); } catch(e) {}
+  }
 }
 
-
 // ==============================
-// SECTION 8B: FIREFLIES
+// 7: KEYBOARD INPUT
 // ==============================
-
-const fireflies = [];
-for (let i = 0; i < FIREFLY_COUNT; i++) {
-  const ff = new THREE.Mesh(
-    new THREE.SphereGeometry(0.06, 6, 6),
-    new THREE.MeshBasicMaterial({ color: 0xaaff44 })
-  );
-  ff.position.set(
-    (Math.random() - 0.5) * WORLD_SIZE * 1.4,
-    1 + Math.random() * 3,
-    (Math.random() - 0.5) * WORLD_SIZE * 1.4
-  );
-  ff.userData = {
-    baseY: ff.position.y,
-    speed: 0.5 + Math.random() * 1.5,
-    phase: Math.random() * Math.PI * 2,
-    driftX: (Math.random() - 0.5) * 0.01,
-    driftZ: (Math.random() - 0.5) * 0.01,
-  };
-  scene.add(ff);
-  fireflies.push(ff);
-}
-
-
-// ==============================
-// SECTION 9: PLAYER (Boy) — with running animation
-// ==============================
-
-const player = new THREE.Group();
-
-// Body — green adventure tunic
-const body = new THREE.Mesh(
-  new THREE.BoxGeometry(0.8, 1.2, 0.5),
-  new THREE.MeshStandardMaterial({ color: 0x4a7a3a })
-);
-body.position.y = 1.4;
-body.castShadow = true;
-player.add(body);
-
-// Belt
-const belt = new THREE.Mesh(
-  new THREE.BoxGeometry(0.85, 0.15, 0.55),
-  new THREE.MeshStandardMaterial({ color: 0x6b3a1e })
-);
-belt.position.y = 1.0;
-player.add(belt);
-
-// Head — skin-colored sphere
-const head = new THREE.Mesh(
-  new THREE.SphereGeometry(0.35, 12, 12),
-  new THREE.MeshStandardMaterial({ color: 0xf5c6a0 })
-);
-head.position.y = 2.35;
-head.castShadow = true;
-player.add(head);
-
-// Hair — brown on top
-const hair = new THREE.Mesh(
-  new THREE.SphereGeometry(0.38, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
-  new THREE.MeshStandardMaterial({ color: 0x5c3a1e })
-);
-hair.position.y = 2.4;
-player.add(hair);
-
-// Backpack — brown box on back
-const backpack = new THREE.Mesh(
-  new THREE.BoxGeometry(0.5, 0.6, 0.3),
-  new THREE.MeshStandardMaterial({ color: 0x7a4a2a })
-);
-backpack.position.set(0, 1.5, -0.35);
-player.add(backpack);
-
-// LEFT LEG — pivoted at hip for swing animation
-const legLPivot = new THREE.Group();
-legLPivot.position.set(-0.2, 0.8, 0);  // Hip joint
-const legLMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.28, 0.8, 0.3),
-  new THREE.MeshStandardMaterial({ color: 0x4a3520 })
-);
-legLMesh.position.y = -0.4;  // Hang below pivot
-legLPivot.add(legLMesh);
-player.add(legLPivot);
-
-// RIGHT LEG — pivoted at hip
-const legRPivot = new THREE.Group();
-legRPivot.position.set(0.2, 0.8, 0);
-const legRMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.28, 0.8, 0.3),
-  new THREE.MeshStandardMaterial({ color: 0x4a3520 })
-);
-legRMesh.position.y = -0.4;
-legRPivot.add(legRMesh);
-player.add(legRPivot);
-
-// LEFT ARM — pivoted at shoulder
-const armLPivot = new THREE.Group();
-armLPivot.position.set(-0.55, 1.8, 0);  // Shoulder joint
-const armLMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.2, 0.7, 0.25),
-  new THREE.MeshStandardMaterial({ color: 0x4a7a3a })
-);
-armLMesh.position.y = -0.35;
-armLPivot.add(armLMesh);
-player.add(armLPivot);
-
-// RIGHT ARM — pivoted at shoulder
-const armRPivot = new THREE.Group();
-armRPivot.position.set(0.55, 1.8, 0);
-const armRMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.2, 0.7, 0.25),
-  new THREE.MeshStandardMaterial({ color: 0x4a7a3a })
-);
-armRMesh.position.y = -0.35;
-armRPivot.add(armRMesh);
-player.add(armRPivot);
-
-player.position.set(0, 0, 0);
-scene.add(player);
-
-// Track if player is moving for animation
-let playerIsMoving = false;
-
-
-// ==============================
-// SECTION 10: GHOST (Scary Wraith)
-// ==============================
-// A terrifying supernatural wraith with trailing mist.
-
-const ghost = new THREE.Group();
-
-// Wraith body — dark tattered cloak shape
-const ghostBody = new THREE.Mesh(
-  new THREE.ConeGeometry(1.2, 3, 12),
-  new THREE.MeshStandardMaterial({
-    color: 0x1a1a2a,
-    transparent: true,
-    opacity: 0.7,
-    emissive: 0x330022,
-    emissiveIntensity: 0.4,
-  })
-);
-ghostBody.position.y = 2;
-ghostBody.rotation.x = Math.PI;  // Wide part on top
-ghost.add(ghostBody);
-
-// Wraith head — dark hooded shape
-const ghostHead = new THREE.Mesh(
-  new THREE.SphereGeometry(0.6, 12, 12),
-  new THREE.MeshStandardMaterial({
-    color: 0x111122,
-    transparent: true,
-    opacity: 0.8,
-    emissive: 0x220011,
-    emissiveIntensity: 0.3,
-  })
-);
-ghostHead.position.y = 3.2;
-ghost.add(ghostHead);
-
-// Glowing eyes — piercing red
-const eyeGlowMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
-const gEyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeGlowMat);
-gEyeL.position.set(-0.18, 3.3, 0.48);
-ghost.add(gEyeL);
-const gEyeR = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeGlowMat);
-gEyeR.position.set(0.18, 3.3, 0.48);
-ghost.add(gEyeR);
-
-// Glowing mouth — eerie slit
-const mouth = new THREE.Mesh(
-  new THREE.BoxGeometry(0.25, 0.06, 0.1),
-  new THREE.MeshBasicMaterial({ color: 0xcc0044 })
-);
-mouth.position.set(0, 3.0, 0.55);
-ghost.add(mouth);
-
-// Clawed hands
-const clawMat = new THREE.MeshStandardMaterial({
-  color: 0x222233, emissive: 0x110011, emissiveIntensity: 0.3
-});
-const clawL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.15), clawMat);
-clawL.position.set(-0.9, 2.5, 0.5);
-clawL.rotation.z = 0.3;
-ghost.add(clawL);
-const clawR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.15), clawMat);
-clawR.position.set(0.9, 2.5, 0.5);
-clawR.rotation.z = -0.3;
-ghost.add(clawR);
-
-// Mist trail wisps — transparent spheres that trail behind
-const ghostMist = [];
-for (let i = 0; i < 8; i++) {
-  const wisp = new THREE.Mesh(
-    new THREE.SphereGeometry(0.3 + Math.random() * 0.4, 8, 6),
-    new THREE.MeshBasicMaterial({
-      color: 0x443366,
-      transparent: true,
-      opacity: 0.15 + Math.random() * 0.1,
-    })
-  );
-  wisp.position.set(
-    (Math.random() - 0.5) * 1.5,
-    0.5 + Math.random() * 2,
-    -0.5 - Math.random() * 2
-  );
-  wisp.userData = {
-    offsetX: (Math.random() - 0.5) * 0.02,
-    offsetY: Math.random() * 0.01,
-    phase: Math.random() * Math.PI * 2,
-  };
-  ghost.add(wisp);
-  ghostMist.push(wisp);
-}
-
-ghost.position.set(30, 0, 30);
-scene.add(ghost);
-
-
-// ==============================
-// SECTION 11: TREASURE CHEST
-// ==============================
-// A golden box with a lid, placed randomly in the forest.
-
-const treasure = new THREE.Group();
-
-// Chest base — golden box
-const chestBase = new THREE.Mesh(
-  new THREE.BoxGeometry(1.4, 0.9, 1),
-  new THREE.MeshStandardMaterial({
-    color: 0xdaa520,
-    roughness: 0.3,
-    metalness: 0.7,
-  })
-);
-chestBase.position.y = 0.45;
-chestBase.castShadow = true;
-treasure.add(chestBase);
-
-// Chest lid — slightly rounded top
-const chestLid = new THREE.Mesh(
-  new THREE.BoxGeometry(1.5, 0.4, 1.1),
-  new THREE.MeshStandardMaterial({
-    color: 0xc8961e,
-    roughness: 0.3,
-    metalness: 0.7,
-  })
-);
-chestLid.position.y = 1.1;
-chestLid.castShadow = true;
-treasure.add(chestLid);
-
-// Lock — small dark box
-const lock = new THREE.Mesh(
-  new THREE.BoxGeometry(0.2, 0.3, 0.15),
-  new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.9 })
-);
-lock.position.set(0, 0.8, 0.55);
-treasure.add(lock);
-
-// Place treasure at a random distant position
-function placeTreasure() {
-  let tx, tz;
-  do {
-    tx = (Math.random() - 0.5) * WORLD_SIZE * 1.2;
-    tz = (Math.random() - 0.5) * WORLD_SIZE * 1.2;
-  } while (Math.sqrt(tx * tx + tz * tz) < 15);  // Not too close to start
-  treasure.position.set(tx, 0, tz);
-  treasureGlow.position.set(tx, 3, tz);  // Golden glow above chest
-}
-
-placeTreasure();
-scene.add(treasure);
-
-
-// ==============================
-// SECTION 12: SPOOKY GHOST AREA
-// ==============================
-
-const spookyZone = new THREE.Mesh(
-  new THREE.CircleGeometry(10, 32),
-  new THREE.MeshBasicMaterial({ color: 0x1a0033, transparent: true, opacity: 0.4 })
-);
-spookyZone.rotation.x = -Math.PI / 2;
-spookyZone.position.set(30, 0.02, 30);
-scene.add(spookyZone);
-
-// Purple mist pillars
-for (let i = 0; i < 7; i++) {
-  const a = (i / 7) * Math.PI * 2;
-  const p = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.3, 0.1, 3 + Math.random() * 4, 6),
-    new THREE.MeshBasicMaterial({ color: 0x6633aa, transparent: true, opacity: 0.12 })
-  );
-  p.position.set(30 + Math.cos(a) * 6, 2, 30 + Math.sin(a) * 6);
-  scene.add(p);
-}
-// Spooky glow
-const spookyLight = new THREE.PointLight(0x6633aa, 1, 15);
-spookyLight.position.set(30, 3, 30);
-scene.add(spookyLight);
-
-
-// ==============================
-// SECTION 13: KEYBOARD INPUT
-// ==============================
-
 document.addEventListener('keydown', (e) => {
   keys[e.key] = true;
-  // Prevent page scrolling with arrow keys
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) {
-    e.preventDefault();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if ((e.key === 'p' || e.key === 'P') && gameStarted && !gameOver) togglePause();
+  if ((e.key === 'c' || e.key === 'C') && gameStarted && !gameOver && !gamePaused) {
+    cameraMode = cameraMode === 'third' ? 'top' : 'third';
   }
 });
-
-document.addEventListener('keyup', (e) => {
-  keys[e.key] = false;
-});
-
+document.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
 // ==============================
-// SECTION 14: PLAYER MOVEMENT
+// 8: PLAYER MOVEMENT
 // ==============================
-// Moves the player based on WASD / Arrow keys.
-// Keeps the player inside the world boundaries.
-// Checks collision with trees and rocks.
-
 function movePlayer() {
   const prevX = player.position.x;
   const prevZ = player.position.z;
+  const isSprinting = keys['Shift'];
+  const spd = isSprinting ? SPRINT_SPEED : PLAYER_SPEED;
 
-  // Move FORWARD (W or ArrowUp)
-  if (keys['w'] || keys['W'] || keys['ArrowUp']) {
-    player.position.z -= PLAYER_SPEED;
-  }
-  // Move BACKWARD (S or ArrowDown)
-  if (keys['s'] || keys['S'] || keys['ArrowDown']) {
-    player.position.z += PLAYER_SPEED;
-  }
-  // Move LEFT (A or ArrowLeft)
-  if (keys['a'] || keys['A'] || keys['ArrowLeft']) {
-    player.position.x -= PLAYER_SPEED;
-  }
-  // Move RIGHT (D or ArrowRight)
-  if (keys['d'] || keys['D'] || keys['ArrowRight']) {
-    player.position.x += PLAYER_SPEED;
-  }
+  if (keys['w']||keys['W']||keys['ArrowUp'])    player.position.z -= spd;
+  if (keys['s']||keys['S']||keys['ArrowDown'])  player.position.z += spd;
+  if (keys['a']||keys['A']||keys['ArrowLeft'])  player.position.x -= spd;
+  if (keys['d']||keys['D']||keys['ArrowRight']) player.position.x += spd;
 
-  // Keep player inside world boundaries
-  player.position.x = Math.max(-WORLD_SIZE + 1, Math.min(WORLD_SIZE - 1, player.position.x));
-  player.position.z = Math.max(-WORLD_SIZE + 1, Math.min(WORLD_SIZE - 1, player.position.z));
+  // Boundary clamp
+  player.position.x = Math.max(-WORLD_SIZE+1, Math.min(WORLD_SIZE-1, player.position.x));
+  player.position.z = Math.max(-WORLD_SIZE+1, Math.min(WORLD_SIZE-1, player.position.z));
 
-  // Collision with trees — push back if touching
-  for (const tree of trees) {
-    const dx = player.position.x - tree.x;
-    const dz = player.position.z - tree.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist < tree.radius) {
-      player.position.x = prevX;
-      player.position.z = prevZ;
-      break;
-    }
+  // Tree collision
+  for (const t of trees) {
+    const d = Math.sqrt((player.position.x-t.x)**2 + (player.position.z-t.z)**2);
+    if (d < t.radius) { player.position.x = prevX; player.position.z = prevZ; break; }
+  }
+  // Rock collision
+  for (const r of rocks) {
+    const d = Math.sqrt((player.position.x-r.x)**2 + (player.position.z-r.z)**2);
+    if (d < r.radius) { player.position.x = prevX; player.position.z = prevZ; break; }
   }
 
-  // Collision with rocks — push back if touching
-  for (const rock of rocks) {
-    const dx = player.position.x - rock.x;
-    const dz = player.position.z - rock.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist < rock.radius) {
-      player.position.x = prevX;
-      player.position.z = prevZ;
-      break;
-    }
-  }
-
-  // Rotate player to face movement direction
   const movedX = player.position.x - prevX;
   const movedZ = player.position.z - prevZ;
   playerIsMoving = (Math.abs(movedX) > 0.001 || Math.abs(movedZ) > 0.001);
   if (playerIsMoving) {
-    player.rotation.y = Math.atan2(movedX, movedZ);
+    const targetRot = Math.atan2(movedX, movedZ);
+    player.rotation.y += (targetRot - player.rotation.y) * 0.2; // smooth rotation
   }
 }
 
-
 // ==============================
-// SECTION 15: GHOST AI
+// 9: GHOST AI
 // ==============================
-// The ghost chases the player automatically.
-// It moves towards the player's position each frame.
-// ghostSpeed increases with difficulty.
-
 function moveGhost() {
   const dx = player.position.x - ghost.position.x;
   const dz = player.position.z - ghost.position.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
+  const dist = Math.sqrt(dx*dx + dz*dz);
 
   if (dist > 0.5) {
-    // Normalize direction and move towards player
-    ghost.position.x += (dx / dist) * ghostSpeed;
-    ghost.position.z += (dz / dist) * ghostSpeed;
+    ghost.position.x += (dx/dist) * ghostSpeed;
+    ghost.position.z += (dz/dist) * ghostSpeed;
   }
-
-  // Rotate ghost to face the player
   ghost.rotation.y = Math.atan2(dx, dz);
+  ghost.position.y = Math.sin(Date.now()*0.003) * 0.4;
 
-  // Floating animation — bobbing up and down
-  ghost.position.y = Math.sin(Date.now() * 0.003) * 0.4;
-
-  // Update ghost's red glow position
-  ghostGlow.position.set(ghost.position.x, 2.5, ghost.position.z);
+  // Ghost near sound
+  if (dist < 10) {
+    ghostSoundTimer++;
+    if (ghostSoundTimer % 60 === 0) playGhostNearSound();
+  }
 }
 
+// ==============================
+// 10: HEALTH SYSTEM
+// ==============================
+function updateHealth() {
+  const dx = player.position.x - ghost.position.x;
+  const dz = player.position.z - ghost.position.z;
+  const dist = Math.sqrt(dx*dx + dz*dz);
+
+  if (dist < 3) {
+    health -= GHOST_DAMAGE * (3 - dist); // more damage when closer
+  } else {
+    health = Math.min(MAX_HEALTH, health + HEALTH_REGEN);
+  }
+  health = Math.max(0, Math.min(MAX_HEALTH, health));
+
+  const pct = (health / MAX_HEALTH) * 100;
+  healthBarFill.style.width = pct + '%';
+
+  // Color shift
+  if (pct > 60) {
+    healthBarFill.style.background = 'linear-gradient(90deg, #34d399, #22c55e)';
+    healthBarFill.style.boxShadow = '0 0 8px rgba(52,211,153,0.4)';
+  } else if (pct > 30) {
+    healthBarFill.style.background = 'linear-gradient(90deg, #fb923c, #facc15)';
+    healthBarFill.style.boxShadow = '0 0 8px rgba(251,146,60,0.4)';
+  } else {
+    healthBarFill.style.background = 'linear-gradient(90deg, #f43f5e, #ef4444)';
+    healthBarFill.style.boxShadow = '0 0 8px rgba(244,63,94,0.5)';
+  }
+
+  if (health <= 0) endGame('lose');
+}
 
 // ==============================
-// SECTION 16: COLLISION DETECTION
+// 11: COLLISION DETECTION
 // ==============================
-// Simple distance-based collision.
-// If two objects are close enough, they're "touching".
-
 function checkCollisions() {
-  // --- Player vs Ghost ---
-  const gDx = player.position.x - ghost.position.x;
-  const gDz = player.position.z - ghost.position.z;
-  const ghostDist = Math.sqrt(gDx * gDx + gDz * gDz);
+  const gDist = Math.sqrt(
+    (player.position.x-ghost.position.x)**2 +
+    (player.position.z-ghost.position.z)**2
+  );
+  if (gDist < 1.5) { endGame('lose'); return; }
 
-  if (ghostDist < 1.5) {
-    endGame('lose');
-    return;
-  }
-
-  // --- Player vs Treasure ---
-  const tDx = player.position.x - treasure.position.x;
-  const tDz = player.position.z - treasure.position.z;
-  const treasureDist = Math.sqrt(tDx * tDx + tDz * tDz);
-
-  if (treasureDist < 2) {
-    endGame('win');
-    return;
-  }
+  const tDist = Math.sqrt(
+    (player.position.x-treasure.position.x)**2 +
+    (player.position.z-treasure.position.z)**2
+  );
+  if (tDist < 2) { endGame('win'); return; }
 }
 
-
 // ==============================
-// SECTION 17: CAMERA FOLLOW
+// 12: CAMERA
 // ==============================
-// Camera follows the player from behind and above.
-// Smooth lerp (linear interpolation) for fluid motion.
+let cameraShakeTime = 0;
 
 function updateCamera() {
-  // Target camera position: behind and above the player
-  const targetX = player.position.x;
-  const targetY = player.position.y + 10;
-  const targetZ = player.position.z + 14;
+  if (cameraMode === 'third') {
+    // Behind and above player, offset by facing direction
+    const behindX = player.position.x - Math.sin(player.rotation.y) * 6;
+    const behindZ = player.position.z - Math.cos(player.rotation.y) * 6;
+    const targetX = behindX;
+    const targetY = player.position.y + 8;
+    const targetZ = behindZ + 8;
 
-  // Smoothly move camera towards target (lerp factor 0.05)
-  camera.position.x += (targetX - camera.position.x) * 0.05;
-  camera.position.y += (targetY - camera.position.y) * 0.05;
-  camera.position.z += (targetZ - camera.position.z) * 0.05;
+    camera.position.x += (targetX - camera.position.x) * 0.05;
+    camera.position.y += (targetY - camera.position.y) * 0.05;
+    camera.position.z += (targetZ - camera.position.z) * 0.05;
+  } else {
+    // Top-down view
+    camera.position.x += (player.position.x - camera.position.x) * 0.08;
+    camera.position.y += (25 - camera.position.y) * 0.05;
+    camera.position.z += (player.position.z + 2 - camera.position.z) * 0.08;
+  }
 
-  // Always look at the player
+  // Camera shake
+  if (cameraShakeTime > 0) {
+    camera.position.x += (Math.random()-0.5) * 0.3;
+    camera.position.y += (Math.random()-0.5) * 0.2;
+    cameraShakeTime--;
+  }
+
   camera.lookAt(player.position.x, 1.5, player.position.z);
 }
 
+// ==============================
+// 13: DISTANCE INDICATOR
+// ==============================
+function updateDistances() {
+  const tDist = Math.sqrt(
+    (player.position.x-treasure.position.x)**2 +
+    (player.position.z-treasure.position.z)**2
+  );
+  const gDist = Math.sqrt(
+    (player.position.x-ghost.position.x)**2 +
+    (player.position.z-ghost.position.z)**2
+  );
+  treasureDistEl.textContent = Math.round(tDist);
+  ghostDistEl.textContent = Math.round(gDist);
+}
 
 // ==============================
-// SECTION 18: MINIMAP
+// 14: MINIMAP
 // ==============================
-// A small 2D overhead view in the corner showing positions.
-
 function drawMinimap() {
-  const w = minimapCanvas.width;
-  const h = minimapCanvas.height;
+  const w = minimapCanvas.width, h = minimapCanvas.height;
   const scale = w / (WORLD_SIZE * 2);
 
   minimapCtx.clearRect(0, 0, w, h);
-
-  // Background
-  minimapCtx.fillStyle = 'rgba(0, 20, 0, 0.7)';
+  minimapCtx.fillStyle = 'rgba(0,20,0,0.7)';
   minimapCtx.fillRect(0, 0, w, h);
-
-  // Border
   minimapCtx.strokeStyle = 'rgba(255,255,255,0.15)';
   minimapCtx.strokeRect(0, 0, w, h);
 
-  // Trees (small green dots)
+  // Trees
   minimapCtx.fillStyle = '#1a5c1a';
-  for (const tree of trees) {
-    const mx = (tree.x + WORLD_SIZE) * scale;
-    const mz = (tree.z + WORLD_SIZE) * scale;
+  for (const t of trees) {
     minimapCtx.beginPath();
-    minimapCtx.arc(mx, mz, 2, 0, Math.PI * 2);
+    minimapCtx.arc((t.x+WORLD_SIZE)*scale, (t.z+WORLD_SIZE)*scale, 2, 0, Math.PI*2);
     minimapCtx.fill();
   }
 
-  // Treasure (gold dot)
+  // Treasure
   minimapCtx.fillStyle = '#facc15';
-  const tx = (treasure.position.x + WORLD_SIZE) * scale;
-  const tz = (treasure.position.z + WORLD_SIZE) * scale;
   minimapCtx.beginPath();
-  minimapCtx.arc(tx, tz, 4, 0, Math.PI * 2);
+  minimapCtx.arc((treasure.position.x+WORLD_SIZE)*scale, (treasure.position.z+WORLD_SIZE)*scale, 5, 0, Math.PI*2);
   minimapCtx.fill();
 
-  // Ghost (red dot)
+  // Ghost
   minimapCtx.fillStyle = '#ff3366';
-  const gx = (ghost.position.x + WORLD_SIZE) * scale;
-  const gz = (ghost.position.z + WORLD_SIZE) * scale;
   minimapCtx.beginPath();
-  minimapCtx.arc(gx, gz, 3, 0, Math.PI * 2);
+  minimapCtx.arc((ghost.position.x+WORLD_SIZE)*scale, (ghost.position.z+WORLD_SIZE)*scale, 3.5, 0, Math.PI*2);
   minimapCtx.fill();
 
-  // Player (cyan dot)
+  // Player
   minimapCtx.fillStyle = '#22d3ee';
-  const px = (player.position.x + WORLD_SIZE) * scale;
-  const pz = (player.position.z + WORLD_SIZE) * scale;
   minimapCtx.beginPath();
-  minimapCtx.arc(px, pz, 3.5, 0, Math.PI * 2);
+  minimapCtx.arc((player.position.x+WORLD_SIZE)*scale, (player.position.z+WORLD_SIZE)*scale, 4, 0, Math.PI*2);
   minimapCtx.fill();
+
+  // Direction indicator
+  minimapCtx.strokeStyle = '#22d3ee';
+  minimapCtx.lineWidth = 2;
+  const px = (player.position.x+WORLD_SIZE)*scale;
+  const pz = (player.position.z+WORLD_SIZE)*scale;
+  minimapCtx.beginPath();
+  minimapCtx.moveTo(px, pz);
+  minimapCtx.lineTo(px + Math.sin(player.rotation.y)*8, pz - Math.cos(player.rotation.y)*8);
+  minimapCtx.stroke();
 }
 
-
 // ==============================
-// SECTION 19: DIFFICULTY
+// 15: DIFFICULTY
 // ==============================
-// Ghost gets faster as score increases.
-//   Score 0–100:   Easy   (ghostSpeed = 0.04)
-//   Score 110–200: Medium (ghostSpeed = 0.06)
-//   Score 210+:    Hard   (ghostSpeed = 0.08)
-
 function updateDifficulty() {
   if (score <= 100) {
     ghostSpeed = GHOST_BASE_SPD;
-    difficultyEl.textContent = 'Easy';
-    difficultyEl.className = 'easy';
+    difficultyEl.textContent = 'Easy'; difficultyEl.className = 'easy';
   } else if (score <= 200) {
     ghostSpeed = 0.06;
-    difficultyEl.textContent = 'Medium';
-    difficultyEl.className = 'medium';
+    difficultyEl.textContent = 'Medium'; difficultyEl.className = 'medium';
   } else {
     ghostSpeed = 0.08;
-    difficultyEl.textContent = 'Hard';
-    difficultyEl.className = 'hard';
+    difficultyEl.textContent = 'Hard'; difficultyEl.className = 'hard';
   }
 }
 
+// ==============================
+// 16: TREASURE PLACEMENT
+// ==============================
+function placeTreasure() {
+  let tx, tz;
+  do {
+    tx = (Math.random()-0.5)*WORLD_SIZE*1.2;
+    tz = (Math.random()-0.5)*WORLD_SIZE*1.2;
+  } while (Math.sqrt(tx*tx+tz*tz) < 15);
+  treasure.position.set(tx, 0, tz);
+}
 
 // ==============================
-// SECTION 20: END GAME
+// 17: END GAME
 // ==============================
-
 function endGame(type) {
   if (gameOver) return;
   gameOver = true;
-
   clearInterval(timerInterval);
   clearInterval(scoreInterval);
 
   overlay.classList.remove('hidden');
 
   if (type === 'win') {
+    score += BONUS_SCORE;
     overlayEmoji.textContent = '🎉';
-    statusText.textContent   = 'You Win! Treasure found!';
-    statusText.className     = 'win';
-    statusSub.textContent    = `Score: ${score} | Time: ${time}s — Amazing!`;
+    statusText.textContent = 'Treasure Found!';
+    statusText.className = 'win';
+    statusSub.textContent = 'You escaped the ghost and claimed the treasure!';
+    stopBackgroundMusic();
+    playWinSound();
   } else {
+    cameraShakeTime = 30;
     overlayEmoji.textContent = '💀';
-    statusText.textContent   = 'Game Over! Ghost caught you!';
-    statusText.className     = 'lose';
-    statusSub.textContent    = `Score: ${score} | Time: ${time}s — Try again!`;
+    statusText.textContent = 'Game Over!';
+    statusText.className = 'lose';
+    statusSub.textContent = 'The ghost consumed your soul...';
+    stopBackgroundMusic();
+    playLoseSound();
+  }
+
+  // Final stats panel
+  finalStats.innerHTML = `
+    <div class="final-stat">
+      <div class="final-stat-label">Score</div>
+      <div class="final-stat-value gold">${score}</div>
+    </div>
+    <div class="final-stat">
+      <div class="final-stat-label">Time</div>
+      <div class="final-stat-value green">${time}s</div>
+    </div>
+    <div class="final-stat">
+      <div class="final-stat-label">Health</div>
+      <div class="final-stat-value cyan">${Math.round(health)}%</div>
+    </div>
+  `;
+}
+
+// ==============================
+// 18: PAUSE TOGGLE
+// ==============================
+function togglePause() {
+  if (gameOver) return;
+  gamePaused = !gamePaused;
+  if (gamePaused) {
+    pauseScreen.classList.remove('hidden');
+    clearInterval(timerInterval);
+    clearInterval(scoreInterval);
+    pauseBackgroundMusic();
+  } else {
+    pauseScreen.classList.add('hidden');
+    startTimers();
+    resumeBackgroundMusic();
   }
 }
 
-
 // ==============================
-// SECTION 21: START / RESTART
+// 19: TIMERS
 // ==============================
-
-function startGame() {
-  gameOver = false;
-  score = 0;
-  time  = 0;
-  ghostSpeed = GHOST_BASE_SPD;
-
-  scoreEl.textContent  = score;
-  timerEl.textContent  = time;
-  difficultyEl.textContent = 'Easy';
-  difficultyEl.className = 'easy';
-  overlay.classList.add('hidden');
-
-  // Reset positions
-  player.position.set(0, 0, 0);
-  ghost.position.set(30, 0, 30);
-  placeTreasure();
-
-  // Score: +10 every second
+function startTimers() {
   clearInterval(scoreInterval);
   scoreInterval = setInterval(() => {
-    if (!gameOver) {
+    if (!gameOver && !gamePaused) {
       score += 10;
       scoreEl.textContent = score;
       updateDifficulty();
     }
   }, 1000);
 
-  // Timer
   clearInterval(timerInterval);
   timerInterval = setInterval(() => {
-    if (!gameOver) {
+    if (!gameOver && !gamePaused) {
       time++;
       timerEl.textContent = time;
     }
   }, 1000);
 }
 
-// Called by the "Play Again" button
-function restartGame() {
-  startGame();
+// ==============================
+// 20: START / RESTART
+// ==============================
+function startGame() {
+  gameOver = false;
+  gamePaused = false;
+  gameStarted = true;
+  score = 0; time = 0; health = MAX_HEALTH;
+  ghostSpeed = GHOST_BASE_SPD;
+  ghostSoundTimer = 0;
+  cameraMode = 'third';
+
+  scoreEl.textContent = 0;
+  timerEl.textContent = 0;
+  difficultyEl.textContent = 'Easy';
+  difficultyEl.className = 'easy';
+  healthBarFill.style.width = '100%';
+
+  overlay.classList.add('hidden');
+  pauseScreen.classList.add('hidden');
+  startScreen.classList.add('hidden');
+
+  hudEl.classList.remove('hidden');
+  gameButtonsEl.classList.remove('hidden');
+  controlsHintEl.classList.remove('hidden');
+  minimapCanvas.classList.remove('hidden');
+  distIndicator.classList.remove('hidden');
+
+  player.position.set(0, 0, 0);
+  player.rotation.y = 0;
+  ghost.position.set(30, 0, 30);
+  placeTreasure();
+
+  // Start music and timers
+  stopBackgroundMusic();
+  startBackgroundMusic();
+  startTimers();
 }
 
+function restartGame() { startGame(); }
 
 // ==============================
-// SECTION 22: ANIMATION LOOP
+// 21: BUTTON EVENTS
 // ==============================
-// Runs every frame (~60 fps). Updates movement, collisions, camera, and renders.
+playBtn.addEventListener('click', () => startGame());
+pauseBtn.addEventListener('click', () => togglePause());
+restartGameBtn.addEventListener('click', () => restartGame());
+resumeBtn.addEventListener('click', () => togglePause());
+pauseRestartBtn.addEventListener('click', () => restartGame());
+restartBtn.addEventListener('click', () => restartGame());
 
+// ==============================
+// 22: ANIMATION LOOP
+// ==============================
 function animate() {
   requestAnimationFrame(animate);
   const t = Date.now() * 0.001;
 
-  if (!gameOver) {
+  if (!gameOver && !gamePaused && gameStarted) {
     movePlayer();
     moveGhost();
+    updateHealth();
     checkCollisions();
-    treasure.rotation.y += 0.01;
+    updateDistances();
 
-    // --- BOY RUNNING ANIMATION ---
-    // Swing legs and arms when moving
-    if (playerIsMoving) {
-      const swing = Math.sin(t * 12) * 0.6;  // Fast swing
-      legLPivot.rotation.x = swing;
-      legRPivot.rotation.x = -swing;
-      armLPivot.rotation.x = -swing;  // Arms opposite to legs
-      armRPivot.rotation.x = swing;
-      // Slight body bob
-      body.position.y = 1.4 + Math.abs(Math.sin(t * 12)) * 0.08;
-    } else {
-      // Idle — gently return to default pose
-      legLPivot.rotation.x *= 0.9;
-      legRPivot.rotation.x *= 0.9;
-      armLPivot.rotation.x *= 0.9;
-      armRPivot.rotation.x *= 0.9;
-      body.position.y = 1.4;
+    // Treasure rotation + sparkle animation
+    treasure.rotation.y += 0.01;
+    for (const sp of treasureObj.sparkles) {
+      const d = sp.userData;
+      sp.position.x = Math.cos(t*d.speed + d.angle) * d.radius;
+      sp.position.z = Math.sin(t*d.speed + d.angle) * d.radius;
+      sp.position.y = 1 + Math.sin(t*2 + d.yOff) * 0.5 + d.yOff*0.5;
+      sp.material.opacity = 0.4 + Math.sin(t*3 + d.angle) * 0.4;
     }
 
-    // --- GHOST MIST ANIMATION ---
+    // Boy running animation
+    if (playerIsMoving) {
+      const swing = Math.sin(t * 12) * 0.6;
+      playerObj.legLPivot.rotation.x = swing;
+      playerObj.legRPivot.rotation.x = -swing;
+      playerObj.armLPivot.rotation.x = -swing;
+      playerObj.armRPivot.rotation.x = swing;
+      playerObj.body.position.y = 1.4 + Math.abs(Math.sin(t*12))*0.08;
+    } else {
+      playerObj.legLPivot.rotation.x *= 0.9;
+      playerObj.legRPivot.rotation.x *= 0.9;
+      playerObj.armLPivot.rotation.x *= 0.9;
+      playerObj.armRPivot.rotation.x *= 0.9;
+      playerObj.body.position.y = 1.4;
+    }
+
+    // Ghost mist animation
     for (const wisp of ghostMist) {
       const d = wisp.userData;
-      wisp.position.x += Math.sin(t * 2 + d.phase) * 0.01;
-      wisp.position.y = 0.5 + Math.sin(t * 1.5 + d.phase) * 0.5 + Math.random() * 0.3;
-      wisp.material.opacity = 0.1 + Math.sin(t + d.phase) * 0.08;
+      wisp.position.x += Math.sin(t*2+d.phase)*0.01;
+      wisp.position.y = 0.5+Math.sin(t*1.5+d.phase)*0.5+Math.random()*0.3;
+      wisp.material.opacity = 0.1+Math.sin(t+d.phase)*0.08;
     }
   }
 
-  // Animate fireflies
+  // Firefly animation (always runs for ambiance)
   for (const ff of fireflies) {
     const d = ff.userData;
-    ff.position.y = d.baseY + Math.sin(t * d.speed + d.phase) * 0.5;
+    ff.position.y = d.baseY + Math.sin(t*d.speed+d.phase)*0.5;
     ff.position.x += d.driftX;
     ff.position.z += d.driftZ;
     if (ff.position.x > WORLD_SIZE) ff.position.x = -WORLD_SIZE;
     if (ff.position.x < -WORLD_SIZE) ff.position.x = WORLD_SIZE;
     if (ff.position.z > WORLD_SIZE) ff.position.z = -WORLD_SIZE;
     if (ff.position.z < -WORLD_SIZE) ff.position.z = WORLD_SIZE;
-    ff.material.opacity = 0.5 + Math.sin(t * d.speed * 2 + d.phase) * 0.5;
+    ff.material.opacity = 0.5+Math.sin(t*d.speed*2+d.phase)*0.5;
     ff.material.transparent = true;
   }
 
@@ -1019,21 +735,16 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-
 // ==============================
-// SECTION 23: WINDOW RESIZE
+// 23: WINDOW RESIZE
 // ==============================
-
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-
 // ==============================
-// SECTION 24: LAUNCH!
+// 24: LAUNCH - show start screen, begin render loop
 // ==============================
-
-startGame();
 animate();
